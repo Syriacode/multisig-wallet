@@ -7,7 +7,6 @@ contract MultiSig {
         uint256 value;
         bytes data;
         bool executed;
-        uint256 approvals;
     }
 
     uint256 public constant THRESHOLD = 2;
@@ -67,21 +66,19 @@ contract MultiSig {
     function submit(address to, uint256 value, bytes calldata data) external onlyOwner returns (uint256 txId) {
         if (to == address(0)) revert ZeroAddress();
         txId = transactions.length;
-        transactions.push(Transaction({to: to, value: value, data: data, executed: false, approvals: 0}));
+        transactions.push(Transaction({to: to, value: value, data: data, executed: false}));
         emit Submitted(txId, msg.sender, to, value);
     }
 
     function approve(uint256 txId) external onlyOwner txExists(txId) notExecuted(txId) {
         if (hasApproved[txId][msg.sender]) revert AlreadyApproved(txId);
         hasApproved[txId][msg.sender] = true;
-        transactions[txId].approvals += 1;
         emit Approved(txId, msg.sender);
     }
 
     function revoke(uint256 txId) external onlyOwner txExists(txId) notExecuted(txId) {
         if (!hasApproved[txId][msg.sender]) revert NotApproved(txId);
         hasApproved[txId][msg.sender] = false;
-        transactions[txId].approvals -= 1;
         emit Revoked(txId, msg.sender);
     }
 
@@ -118,8 +115,11 @@ contract MultiSig {
         if (!ok) revert ExecutionFailed();
     }
 
-    function approvalCount(uint256 txId) public view returns (uint256) {
-        return transactions[txId].approvals;
+    function approvalCount(uint256 txId) public view returns (uint256 count) {
+        // Count only current owners, so a removed owner's old approval no longer counts.
+        for (uint256 i = 0; i < 3; i++) {
+            if (hasApproved[txId][owners[i]]) count++;
+        }
     }
 
     function getTransaction(uint256 txId) external view returns (Transaction memory) {
