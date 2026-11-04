@@ -22,7 +22,10 @@ contract MultiSig {
     event Approved(uint256 indexed txId, address indexed owner);
     event Revoked(uint256 indexed txId, address indexed owner);
     event Executed(uint256 indexed txId);
+    event OwnerReplaced(address indexed oldOwner, address indexed newOwner);
 
+    error NotImplemented();
+    error NotSelf();
     error NotOwner();
     error ZeroAddress();
     error DuplicateOwner(address owner);
@@ -81,6 +84,10 @@ contract MultiSig {
         hasApproved[txId][msg.sender] = false;
         transactions[txId].approvals -= 1;
         emit Revoked(txId, msg.sender);
+    }
+
+    function replaceOwner(address oldOwner, address newOwner) external {
+        revert NotImplemented();
     }
 
     function execute(uint256 txId) external onlyOwner txExists(txId) notExecuted(txId) {
