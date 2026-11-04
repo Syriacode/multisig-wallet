@@ -23,7 +23,6 @@ contract MultiSig {
     event Revoked(uint256 indexed txId, address indexed owner);
     event Executed(uint256 indexed txId);
 
-    error NotImplemented();
     error NotOwner();
     error ZeroAddress();
     error DuplicateOwner(address owner);
@@ -34,35 +33,81 @@ contract MultiSig {
     error NotEnoughApprovals(uint256 have, uint256 need);
     error ExecutionFailed();
 
-    constructor(address[3] memory initialOwners) {}
-
-    receive() external payable {}
-
-    function submit(address to, uint256 value, bytes calldata data) external returns (uint256 txId) {
-        revert NotImplemented();
+    modifier onlyOwner() {
+        if (!isOwner[msg.sender]) revert NotOwner();
+        _;
     }
 
-    function approve(uint256 txId) external {
-        revert NotImplemented();
+    modifier txExists(uint256 txId) {
+        if (txId >= transactions.length) revert TxNotFound(txId);
+        _;
     }
 
-    function revoke(uint256 txId) external {
-        revert NotImplemented();
+    modifier notExecuted(uint256 txId) {
+        if (transactions[txId].executed) revert AlreadyExecuted(txId);
+        _;
     }
 
-    function execute(uint256 txId) external {
-        revert NotImplemented();
+    constructor(address[3] memory initialOwners) {
+        for (uint256 i = 0; i < 3; i++) {
+            address owner = initialOwners[i];
+            if (owner == address(0)) revert ZeroAddress();
+            if (isOwner[owner]) revert DuplicateOwner(owner);
+            isOwner[owner] = true;
+            owners[i] = owner;
+        }
+    }
+
+    receive() external payable {
+        emit Deposited(msg.sender, msg.value);
+    }
+
+    function submit(address to, uint256 value, bytes calldata data) external onlyOwner returns (uint256 txId) {
+        if (to == address(0)) revert ZeroAddress();
+        txId = transactions.length;
+        transactions.push(Transaction({to: to, value: value, data: data, executed: false, approvals: 0}));
+        emit Submitted(txId, msg.sender, to, value);
+    }
+
+    function approve(uint256 txId) external onlyOwner txExists(txId) notExecuted(txId) {
+        if (hasApproved[txId][msg.sender]) revert AlreadyApproved(txId);
+        hasApproved[txId][msg.sender] = true;
+        transactions[txId].approvals += 1;
+        emit Approved(txId, msg.sender);
+    }
+
+    function revoke(uint256 txId) external onlyOwner txExists(txId) notExecuted(txId) {
+        if (!hasApproved[txId][msg.sender]) revert NotApproved(txId);
+        hasApproved[txId][msg.sender] = false;
+        transactions[txId].approvals -= 1;
+        emit Revoked(txId, msg.sender);
+    }
+
+    function execute(uint256 txId) external onlyOwner txExists(txId) notExecuted(txId) {
+        Transaction storage t = transactions[txId];
+
+        // Checks
+        uint256 have = approvalCount(txId);
+        if (have < THRESHOLD) revert NotEnoughApprovals(have, THRESHOLD);
+
+        // Effects
+        t.executed = true;
+        emit Executed(txId);
+
+        // Interactions
+        (bool ok,) = t.to.call{value: t.value}(t.data);
+        if (!ok) revert ExecutionFailed();
     }
 
     function approvalCount(uint256 txId) public view returns (uint256) {
-        revert NotImplemented();
+        return transactions[txId].approvals;
     }
 
     function getTransaction(uint256 txId) external view returns (Transaction memory) {
-        revert NotImplemented();
+        return transactions[txId];
     }
 
     function transactionCount() external view returns (uint256) {
-        revert NotImplemented();
+        return transactions.length;
     }
 }
