@@ -24,7 +24,6 @@ contract MultiSig {
     event Executed(uint256 indexed txId);
     event OwnerReplaced(address indexed oldOwner, address indexed newOwner);
 
-    error NotImplemented();
     error NotSelf();
     error NotOwner();
     error ZeroAddress();
@@ -87,7 +86,20 @@ contract MultiSig {
     }
 
     function replaceOwner(address oldOwner, address newOwner) external {
-        revert NotImplemented();
+        if (msg.sender != address(this)) revert NotSelf();
+        if (newOwner == address(0)) revert ZeroAddress();
+        if (!isOwner[oldOwner]) revert NotOwner();
+        if (isOwner[newOwner]) revert DuplicateOwner(newOwner);
+
+        for (uint256 i = 0; i < 3; i++) {
+            if (owners[i] == oldOwner) {
+                owners[i] = newOwner;
+                break;
+            }
+        }
+        isOwner[oldOwner] = false;
+        isOwner[newOwner] = true;
+        emit OwnerReplaced(oldOwner, newOwner);
     }
 
     function execute(uint256 txId) external onlyOwner txExists(txId) notExecuted(txId) {
